@@ -10,7 +10,7 @@
 <script type="module">
   import { initializeApp }     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, browserLocalPersistence, setPersistence }
                                from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
   const firebaseConfig = {
@@ -25,6 +25,9 @@
   const firebaseApp = initializeApp(firebaseConfig);
   const db   = getFirestore(firebaseApp);
   const auth = getAuth(firebaseApp);
+
+  // Persist session across page reloads and redirects
+  setPersistence(auth, browserLocalPersistence).catch(e => console.warn('setPersistence error:', e));
 
   let currentUID = null;
 
@@ -80,7 +83,20 @@
   };
 
   // Handle redirect result (runs when returning from Google login page)
-  getRedirectResult(auth).catch((e) => console.warn('getRedirectResult error:', e));
+  getRedirectResult(auth).then((result) => {
+    if (result && result.user) {
+      console.log('Login via redirect OK:', result.user.displayName);
+      // onAuthStateChanged vai disparar automaticamente
+    }
+  }).catch((e) => {
+    console.warn('getRedirectResult error:', e.code, e.message);
+    // Mostra erro na tela de login
+    const btn = document.getElementById('login-btn');
+    if (btn) {
+      btn.textContent = 'Tentar novamente';
+      btn.disabled = false;
+    }
+  });
 
   window.fbSignOut = async function() {
     await signOut(auth);
