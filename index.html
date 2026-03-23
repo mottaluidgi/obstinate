@@ -2881,6 +2881,11 @@ window.addEventListener('firebase-ready', async () => {
   const loaders = await Promise.all(keys.map(k => window.fbLoad(k)));
   const [fbDone, fbTasks, fbHorm, fbFin, fbDaily, fbEstudo, fbLeiseca, fbSplits, fbPeso] = loaders;
 
+  // Debug
+  console.log('[OBSTINATE] Firebase carregou:', {done:!!fbDone,tasks:!!fbTasks,horm:!!fbHorm,fin:!!fbFin,daily:!!fbDaily,estudo:!!fbEstudo,leiseca:!!fbLeiseca,splits:!!fbSplits,peso:!!fbPeso});
+  if (fbEstudo) console.log('[OBSTINATE] estudo sample:', JSON.stringify(fbEstudo).substring(0,200));
+
+
   // Decide: Firebase tem dados? Usa Firebase. Senão, sobe o localStorage.
   const firebaseHasData = fbDone || fbTasks || fbHorm || fbFin || fbDaily || fbEstudo || fbLeiseca || fbSplits;
 
@@ -2919,7 +2924,7 @@ window.addEventListener('firebase-ready', async () => {
     dailyData = fbDaily.entries || {};
     dailyNextId = fbDaily.nextId || 1;
     try { localStorage.setItem('plano30_daily', JSON.stringify(fbDaily)); } catch(e){}
-    renderFinDaily();
+    renderDailyFin();
   }
   if (fbEstudo) {
     estudoDone = fbEstudo.done || {};
