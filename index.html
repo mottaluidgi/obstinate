@@ -2792,6 +2792,10 @@ function renderProgresso() {
       </div>
     </div>
 
+    <div class="horm-section-title">Horas por matéria</div>
+    <div id="study-chart-container" style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;"></div>
+
+
     <div class="horm-section-title">Por bloco</div>
     <div class="week-grid" style="margin-bottom:16px;">
       <div class="week-col">
@@ -2850,6 +2854,44 @@ function renderProgresso() {
       </div>`;
     }).join('')}`;
 
+  // Build chart separately (avoids nested template literal issues)
+  buildStudyChart(matStats);
+
+}
+
+function buildStudyChart(matStats) {
+  var container = document.getElementById('study-chart-container');
+  if (!container) return;
+
+  var maxMins = 1;
+  matStats.forEach(function(m) { if (m.mins > maxMins) maxMins = m.mins; });
+
+  var chartH = 100, barW = 28, gap = 8;
+  var totalW = matStats.length * (barW + gap) - gap;
+
+  var bars = '';
+  matStats.forEach(function(m, i) {
+    var mins = m.mins;
+    var barH = Math.max(mins > 0 ? 2 : 0, Math.round((mins / maxMins) * chartH));
+    var x = i * (barW + gap);
+    var y = chartH - barH;
+    var hLabel = mins >= 60
+      ? Math.floor(mins/60) + 'h' + (mins%60 > 0 ? String(mins%60).padStart(2,'0') + 'm' : '')
+      : (mins > 0 ? mins + 'm' : '');
+    var shortLabel = m.mat.label.split(/[\s\/]/).pop().substring(0, 4);
+
+    bars += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" rx="3" fill="' + m.mat.color + '" opacity="0.85"/>';
+    if (mins > 0) {
+      bars += '<text x="' + (x + barW/2) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="8" fill="' + m.mat.color + '" font-weight="600">' + hLabel + '</text>';
+    }
+    bars += '<text x="' + (x + barW/2) + '" y="' + (chartH + 14) + '" text-anchor="middle" font-size="8" fill="#666">' + shortLabel + '</text>';
+  });
+
+  container.innerHTML =
+    '<svg width="100%" viewBox="0 -16 ' + totalW + ' ' + (chartH + 28) + '" preserveAspectRatio="xMidYMid meet">' +
+      '<line x1="0" y1="' + chartH + '" x2="' + totalW + '" y2="' + chartH + '" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>' +
+      bars +
+    '</svg>';
 }
 
 function calcAcertos() {
