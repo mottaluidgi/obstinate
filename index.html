@@ -845,6 +845,7 @@
               <option value="penal">Dir. Penal</option>
               <option value="processual">Dir. Processual Penal</option>
               <option value="extravagante">Leg. Penal Especial</option>
+              <option value="revisao">Revisão</option>
             </select>
             <select id="es-bloco" class="ci-input" style="width:100%;text-align:left;">
               <option value="manha">Manhã (1h)</option>
@@ -2646,12 +2647,12 @@ const EDITAL = [
 const MAT_LABELS = {
   portugues:'Língua Portuguesa', informatica:'Informática', logica:'Raciocínio Lógico',
   administrativo:'Dir. Administrativo', constitucional:'Dir. Constitucional',
-  penal:'Dir. Penal', processual:'Dir. Processual Penal', extravagante:'Leg. Penal Especial'
+  penal:'Dir. Penal', processual:'Dir. Processual Penal', extravagante:'Leg. Penal Especial', revisao:'Revisão'
 };
 const MAT_COLORS = {
   portugues:'#e94560', informatica:'#2980b9', logica:'#16a085',
   administrativo:'#8e44ad', constitucional:'#e67e22',
-  penal:'#c0392b', processual:'#27ae60', extravagante:'#f39c12'
+  penal:'#c0392b', processual:'#27ae60', extravagante:'#f39c12', revisao:'#7f8c8d'
 };
 
 let estudoDone = {};
@@ -2756,6 +2757,12 @@ function renderProgresso() {
     const mins = sessoes.filter(s=>s.materia===mat.id).reduce((a,s)=>a+s.minutos,0);
     return {mat, done, total, mins, pct:Math.round(done/total*100)};
   });
+
+  // Add Revisão (not in EDITAL, tracked separately)
+  const revisaoMins = sessoes.filter(s=>s.materia==='revisao').reduce((a,s)=>a+s.minutos,0);
+  if (revisaoMins > 0) {
+    matStats.push({mat:{id:'revisao',label:'Revisão',color:'#7f8c8d'}, done:0, total:0, mins:revisaoMins, pct:100});
+  }
 
   // Bloco manhã vs tarde
   const manha = sessoes.filter(s=>s.bloco==='manha').reduce((a,s)=>a+s.minutos,0);
