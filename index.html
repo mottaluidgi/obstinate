@@ -813,6 +813,7 @@
         <button id="est-tab-leiseca" onclick="switchEstTab('leiseca')" style="flex:1;padding:9px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--bg2);color:var(--text2);">Lei Seca</button>
         <button id="est-tab-progresso" onclick="switchEstTab('progresso')" style="flex:1;padding:9px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--bg2);color:var(--text2);">Progresso</button>
         <button id="est-tab-sessoes" onclick="switchEstTab('sessoes')" style="flex:1;padding:9px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--bg2);color:var(--text2);">Sessões</button>
+        <button id="est-tab-checkpoint" onclick="switchEstTab('checkpoint')" style="flex:1;padding:9px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--bg2);color:var(--text2);">Check</button>
       </div>
 
       <!-- EDITAL TAB -->
@@ -831,6 +832,10 @@
       </div>
 
       <!-- SESSÕES TAB -->
+      <div id="est-checkpoint" style="display:none;">
+        <div id="est-checkpoint-content"></div>
+      </div>
+
       <div id="est-sessoes" style="display:none;">
         <div id="est-sessoes-summary"></div>
         <div class="horm-section-title">Registrar sessão</div>
@@ -3101,14 +3106,158 @@ function renderLeiseca() {
 }
 
 function switchEstTab(tab) {
-  ['edital','leiseca','progresso','sessoes'].forEach(t => {
+  ['edital','leiseca','progresso','sessoes','checkpoint'].forEach(t => {
     document.getElementById('est-'+t).style.display = t===tab?'block':'none';
     const btn = document.getElementById('est-tab-'+t);
     if (btn) { btn.style.background = t===tab?'var(--text)':'var(--bg2)'; btn.style.color = t===tab?'#000':'var(--text2)'; }
   });
-  if (tab==='leiseca')   renderLeiseca();
-  if (tab==='progresso') renderProgresso();
-  if (tab==='sessoes')   renderSessoes();
+  if (tab==='leiseca')    renderLeiseca();
+  if (tab==='progresso')  renderProgresso();
+  if (tab==='sessoes')    renderSessoes();
+  if (tab==='checkpoint') renderCheckpoint();
+}
+
+
+/* ── CHECKPOINT SEMANAL ─────────────────────────────────── */
+// checkpoints: [ {semana:'2026-03-16', pct:72, obs:'Fui bem em penal, mal em logica'}, ... ]
+let checkpoints = [];
+try {
+  const s = JSON.parse(localStorage.getItem('plano30_checkpoints') || 'null');
+  if (s) checkpoints = s;
+} catch(e){}
+
+function saveCheckpoints() {
+  try { localStorage.setItem('plano30_checkpoints', JSON.stringify(checkpoints)); } catch(e){}
+  if (window.fbSave) window.fbSave('checkpoints', checkpoints);
+}
+
+function getWeekStartKey(dateStr) {
+  // Returns the Monday of the week for a given date string YYYY-MM-DD
+  const d = dateStr ? new Date(dateStr) : getBrasiliaDate();
+  const jsDay = d.getDay();
+  const diff = jsDay === 0 ? -6 : 1 - jsDay;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() + diff);
+  return mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
+}
+
+function getCurrentWeekStart() {
+  return getWeekStartKey(null);
+}
+
+function getWeekLabel(semana) {
+  const [y,m,d] = semana.split('-');
+  const mon = new Date(+y,+m-1,+d);
+  const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return d + '/' + m + ' – ' + String(sun.getDate()).padStart(2,'0') + '/' + String(sun.getMonth()+1).padStart(2,'0');
+}
+
+function saveCheckpointForm() {
+  const pct = parseInt(document.getElementById('cp-pct').value);
+  const obs = document.getElementById('cp-obs').value.trim();
+  if (isNaN(pct) || pct < 0 || pct > 100) return;
+  const semana = getCurrentWeekStart();
+  const idx = checkpoints.findIndex(c => c.semana === semana);
+  const entry = {semana, pct, obs, data: getTodayKey()};
+  if (idx >= 0) checkpoints[idx] = entry;
+  else checkpoints.unshift(entry);
+  checkpoints.sort((a,b) => b.semana.localeCompare(a.semana));
+  saveCheckpoints();
+  document.getElementById('cp-pct').value = '';
+  document.getElementById('cp-obs').value = '';
+  renderCheckpoint();
+}
+
+function deleteCheckpoint(semana) {
+  checkpoints = checkpoints.filter(c => c.semana !== semana);
+  saveCheckpoints();
+  renderCheckpoint();
+}
+
+function renderCheckpoint() {
+  const el = document.getElementById('est-checkpoint-content');
+  if (!el) return;
+
+  const currentWeek = getCurrentWeekStart();
+  const currentEntry = checkpoints.find(c => c.semana === currentWeek);
+
+  // Trend — last 8 weeks
+  const recent = checkpoints.slice(0,8).reverse();
+  let chartSvg = '';
+  if (recent.length >= 2) {
+    const W = 300, H = 80, PAD = 8;
+    const pcts = recent.map(c=>c.pct);
+    const xStep = (W-PAD*2)/(pcts.length-1);
+    const points = pcts.map((p,i)=>(PAD+i*xStep).toFixed(1)+','+(H-PAD-(p/100)*(H-PAD*2)).toFixed(1)).join(' ');
+    const first = PAD+','+H; const last = (PAD+(pcts.length-1)*xStep).toFixed(1)+','+H;
+    const latest = checkpoints[0];
+    const prev = checkpoints[1];
+    const trend = latest && prev ? latest.pct - prev.pct : 0;
+    const lineColor = trend >= 0 ? '#27ae60' : '#e94560';
+    chartSvg = '<div style="background:var(--bg3);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px;">' +
+      '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Evolução (' + recent.length + ' semanas)</div>' +
+      '<svg width="100%" viewBox="0 -4 ' + W + ' ' + (H+4) + '" preserveAspectRatio="xMidYMid meet">' +
+        '<line x1="'+PAD+'" y1="'+(H-PAD-(70/100)*(H-PAD*2)).toFixed(1)+'" x2="'+(W-PAD)+'" y2="'+(H-PAD-(70/100)*(H-PAD*2)).toFixed(1)+'" stroke="rgba(39,174,96,0.3)" stroke-width="1" stroke-dasharray="3,3"/>' +
+        '<text x="'+(W-PAD+2)+'" y="'+(H-PAD-(70/100)*(H-PAD*2)+3).toFixed(1)+'" font-size="8" fill="#27ae60">70%</text>' +
+        '<path d="M'+first+' L'+points.split(' ').join(' L')+' L'+last+' Z" fill="' + lineColor + '" opacity="0.08"/>' +
+        '<polyline points="'+points+'" fill="none" stroke="'+lineColor+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+        pcts.map((p,i) => '<circle cx="'+(PAD+i*xStep).toFixed(1)+'" cy="'+(H-PAD-(p/100)*(H-PAD*2)).toFixed(1)+'" r="3.5" fill="'+lineColor+'"/>').join('') +
+        pcts.map((p,i) => '<text x="'+(PAD+i*xStep).toFixed(1)+'" y="'+(H-PAD-(p/100)*(H-PAD*2)-6).toFixed(1)+'" text-anchor="middle" font-size="8" fill="'+lineColor+'">'+p+'%</text>').join('') +
+      '</svg>' +
+    '</div>';
+  }
+
+  // Build HTML
+  var html = '';
+
+  // Form
+  html += '<div class="horm-section-title">Semana ' + getWeekLabel(currentWeek) + (currentEntry ? ' · ✓ registrado' : ' · domingo') + '</div>';
+  html += '<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:14px;">';
+  html += '<div style="display:grid;grid-template-columns:80px 1fr;gap:8px;margin-bottom:8px;">';
+  html += '<div>';
+  html += '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">% de acerto</div>';
+  html += '<div style="display:flex;align-items:center;gap:4px;">';
+  html += '<input id="cp-pct" type="number" min="0" max="100" placeholder="0" value="'+(currentEntry?currentEntry.pct:'')+'" style="width:60px;font-size:20px;font-weight:800;text-align:center;padding:6px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);">';
+  html += '<span style="font-size:16px;color:var(--text2);font-weight:700;">%</span>';
+  html += '</div></div>';
+  html += '<div>';
+  html += '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Observações (opcional)</div>';
+  html += '<textarea id="cp-obs" rows="3" placeholder="Ex: Fui bem em Penal, preciso revisar Lógica..." style="width:100%;font-size:12px;padding:7px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);resize:none;">'+(currentEntry?currentEntry.obs||'':'')+'</textarea>';
+  html += '</div></div>';
+  html += '<button onclick="saveCheckpointForm()" style="width:100%;padding:9px;border-radius:var(--radius-sm);border:none;background:var(--text);color:#000;font-size:13px;font-weight:700;cursor:pointer;">';
+  html += currentEntry ? '↺ Atualizar checkpoint' : '+ Salvar checkpoint';
+  html += '</button></div>';
+
+  // Chart
+  html += chartSvg;
+
+  // History
+  if (checkpoints.length > 0) {
+    html += '<div class="horm-section-title">Histórico</div>';
+    checkpoints.forEach(function(c) {
+      var color = c.pct >= 70 ? '#27ae60' : c.pct >= 50 ? '#e67e22' : '#e94560';
+      var isCurrent = c.semana === currentWeek;
+      html += '<div style="background:var(--bg2);border:0.5px solid '+(isCurrent?'rgba(39,174,96,0.3)':'var(--border)')+';border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:6px;">';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:'+(c.obs?'6':'0')+'px;">';
+      html += '<div>';
+      html += '<div style="font-size:11px;color:var(--text2);">' + getWeekLabel(c.semana) + (isCurrent?' · esta semana':'') + '</div>';
+      html += '<div style="font-size:22px;font-weight:800;color:'+color+';line-height:1.2;">' + c.pct + '%</div>';
+      html += '</div>';
+      html += '<div style="display:flex;align-items:center;gap:10px;">';
+      // Progress ring mini
+      var r=18, circ=2*Math.PI*r, dashoff=circ*(1-c.pct/100);
+      html += '<svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="'+r+'" fill="none" stroke="var(--bg3)" stroke-width="5"/><circle cx="23" cy="23" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="5" stroke-linecap="round" stroke-dasharray="'+circ.toFixed(1)+'" stroke-dashoffset="'+dashoff.toFixed(1)+'" transform="rotate(-90 23 23)"/></svg>';
+      html += '<span style="color:var(--text3);font-size:14px;cursor:pointer;" onclick="deleteCheckpoint(\'' + c.semana + '\')">✕</span>';
+      html += '</div></div>';
+      if (c.obs) html += '<div style="font-size:12px;color:var(--text2);border-top:0.5px solid var(--border);padding-top:6px;">' + c.obs + '</div>';
+      html += '</div>';
+    });
+  } else {
+    html += '<div style="text-align:center;padding:24px;color:var(--text3);font-size:13px;">Nenhum checkpoint ainda — preencha todo domingo!</div>';
+  }
+
+  el.innerHTML = html;
 }
 
 renderEdital();
@@ -3154,6 +3303,7 @@ async function uploadLocalToFirebase() {
     splits:  () => splitCounts,
     peso:    () => pesoLog,
     agua:    () => aguaData,
+    checkpoints: () => checkpoints,
   };
   const uploads = Object.entries(localMap).map(([k, getData]) => {
     const data = getData();
@@ -3168,9 +3318,9 @@ async function uploadLocalToFirebase() {
 window.addEventListener('firebase-ready', async () => {
   showSync('☁ Sincronizando...');
 
-  const keys = ['done','tasks','horm','fin','daily','estudo','leiseca','splits','peso','agua'];
+  const keys = ['done','tasks','horm','fin','daily','estudo','leiseca','splits','peso','agua','checkpoints'];
   const loaders = await Promise.all(keys.map(k => window.fbLoad(k)));
-  const [fbDone, fbTasks, fbHorm, fbFin, fbDaily, fbEstudo, fbLeiseca, fbSplits, fbPeso, fbAgua] = loaders;
+  const [fbDone, fbTasks, fbHorm, fbFin, fbDaily, fbEstudo, fbLeiseca, fbSplits, fbPeso, fbAgua, fbCheckpoints] = loaders;
 
   // Debug
   console.log('[OBSTINATE] Firebase carregou:', {done:!!fbDone,tasks:!!fbTasks,horm:!!fbHorm,fin:!!fbFin,daily:!!fbDaily,estudo:!!fbEstudo,leiseca:!!fbLeiseca,splits:!!fbSplits,peso:!!fbPeso});
@@ -3242,6 +3392,11 @@ window.addEventListener('firebase-ready', async () => {
     aguaData = fbAgua;
     try { localStorage.setItem('plano30_agua', JSON.stringify(aguaData)); } catch(e){}
     renderAgua();
+  }
+
+  if (fbCheckpoints) {
+    checkpoints = fbCheckpoints;
+    try { localStorage.setItem('plano30_checkpoints', JSON.stringify(checkpoints)); } catch(e){}
   }
 
   // Re-render TUDO com os dados do Firebase
